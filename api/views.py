@@ -178,13 +178,16 @@ def follower(request, pk):
     return serializer_data.data
 
 
+#HOMEWORK
 
 class PostView(APIView):
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def get(self, request, *args, **kwarg):
         posts = models.Post.objects.filter(author = request.user)
         posts_ser = serializers.PostSerializer(posts, many = True)
         return Response(posts_ser.data)
     
+
     @authentication_classes([SessionAuthentication, BasicAuthentication])
     def post(self, request, *args, **kwargs):
         """creates post first, and after that Postfiles are created.
@@ -210,6 +213,8 @@ class PostView(APIView):
         post_ser = serializers.PostSerializer(post)
         return Response(post_ser.data)
     
+
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def put(self, request, id, *args, **kwargs):
         post = models.Post.objects.filter(author = request.user).get(id = id)
         if request.data['title']:
@@ -220,14 +225,17 @@ class PostView(APIView):
         post_ser = serializers.PostSerializer(post)
         return Response(post_ser.data)
     
+
     def delete(self, request, id, *args, **kwargs):
         post = models.Post.objects.filter(author = request.user).get(id = id)
         post.delete()
         return Response({'success':'post has been deleted'})
     
 
+
 #filtering posts
 @api_view(['GET'])
+@authentication_classes([SessionAuthentication, BasicAuthentication])
 def filter_post(request):
     search = request.data['search']
     posts = models.Post.objects.filter(author = request.user).filter(Q(title__icontains = search) | Q(body__icontains = search))
@@ -243,6 +251,8 @@ class CommentView(APIView):
         comments_ser = serializers.CommentSerializer(comments, many = True)
         return Response(comments_ser.data)
     
+
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def post(self, request, id, *args, **kwargs): #id => post_id
         post = models.Post.objects.get(id = id)
         text = request.data['text']
@@ -263,6 +273,8 @@ class CommentView(APIView):
         comment_ser = serializers.CommentSerializer(comment)
         return Response({'success':'created', 'comment':comment_ser.data})
     
+
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def put(self, request, id, *args, **kwargs): # id => comment_id
         try:
             comment = models.Comment.objects.filter(author = request.user).get(id = id)
@@ -273,18 +285,24 @@ class CommentView(APIView):
         except:
             return Response({'fatal': f'no comment with id {id}'})
     
+
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def delete(self, request, id, *args, **kwargs):
         comment = models.Comment.objects.filter(author = request.user).get(id = id)
         comment.delete()
         return Response({'success':'comment has been deleted'})
 
 
+
 class LikeView(APIView):
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def get(self, request, *args, **kwargs):
         reactions = models.Like.objects.filter(author = request.user).order_by('status')
         reactions_ser = serializers.LikeSerializer(reactions, many = True)
         return Response({'all reactions you gave' : reactions_ser.data})
     
+
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def post(self, request, id, *args, **kwargs):
         try:
             post = models.Post.objects.get(id = id)
@@ -305,6 +323,8 @@ class LikeView(APIView):
         except:
             return Response({'fatal': f'no post with id {id}'})
     
+
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def put(self, request, id, *args, **kwargs):
         try:
             post = models.Post.objects.get(id = id)
@@ -321,6 +341,8 @@ class LikeView(APIView):
         except:
             return Response({'fatal': f'no post with id {id}'})
     
+    
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
     def delete(self, request, id, *args, **kwargs):
         try:
             post = models.Post.objects.get(id = id)
