@@ -230,7 +230,7 @@ class PostView(APIView):
 @api_view(['GET'])
 def filter_post(request):
     search = request.data['search']
-    posts = models.Post.objects.filter(Q(title__icontains = search) | Q(body__icontains = search))
+    posts = models.Post.objects.filter(author = request.user).filter(Q(title__icontains = search) | Q(body__icontains = search))
     posts_ser = serializers.PostSerializer(posts, many = True)
     return Response (posts_ser.data)
 
