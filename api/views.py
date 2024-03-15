@@ -1,194 +1,331 @@
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.response import Response
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import BasicAuthentication , SessionAuthentication
-from main import models
 from django.db.models import Q
+
+from rest_framework.views import APIView
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.authentication import BasicAuthentication, SessionAuthentication
+from rest_framework.decorators import authentication_classes
+
+from main import models
 from . import serializers
 
 
-from django.contrib.auth import login, authenticate 
-
-# class MyModelView(ModelViewSet):
-#     queryset = models.MyModel.objects.all() 
-#     serializer_class = serializers.MyModelSerializer
-
-
-#     def get_queryset(self):
-#         queryset = models.MyModel.objects.all()
-#         return queryset
- 
-
-
-@api_view(['POST'])
-def create_user(request):
-    username = request.data["username"]
-    password = request.data["password"]
-    email = request.data['email']
-    first_name = request.data["first_name"]
-    new_user = models.User.objects.create_user(
-        username = username,
-        password = password,
-        email = email,
-        first_name = first_name,
-    )
-    new_user_ser = serializers.UserSerialezer(new_user)
-    return Response({'detail': 'user has been created', 'user': new_user_ser.data})
-    
-
-@api_view(['POST'])
-def update_user(request):
-    #for checking
-    username = request.data.get('username')
-    password = request.data.get('password')
-    #for changing
-    change_username = request.data.get('change_username')
-    change_password = request.data.get('change_password')
-    change_email = request.data.get('change_email')
-    change_first_name = request.data.get('change_first_name')
-    if authenticate(username = username, password = password) is not None:
-        user = models.User.objects.get(username = username)
-        if change_username:
-            user.username = username
-        if change_password:
-            user.set_password(change_password)
-        if change_first_name:
-            user.first_name = change_first_name
-        if change_email:
-            user.email = change_email
-        user.save()
-        user_ser = serializers.UserSerialezer(user)
-        return Response({'detail':'user has been changed', 'user': user_ser.data})
-
-
-@api_view(['POST'])
-def delete_user(request):
-    username = request.data['username']
-    password = request.data['password']
-    if authenticate(username = username, password = password) is not None:
-        user = models.User.objects.get(username = username)
-        user.delete()
-        return Response({'detail': f'user {username} has been deleted'})
-    
-
-@api_view(['GET'])
-def list_users(request):
-    """gets list of usernames that starts with given string for example ali->[ alisher, alijon, alimardon]"""
-    username = request.data['username']
-    filtered = models.User.objects.filter(username__startswith = username)
-    if not filtered.exists():
-        return Response({'detail':'not found'}, status=404)
-    user_ser = serializers.UserSerialezer(filtered, many = True)
-    return Response(user_ser.data)
-
-
-@api_view(['POST'])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-def create_relation(request, id):
-    user = models.User.objects.get(id = id)
-    if request.user != user:
-        if models.User.objects.filter(username = user).first():
-            to_username = models.User.objects.get(username = user)
-            if not models.UserReletion.objects.filter(from_user = request.user, to_user = to_username).first():
-                relation = models.UserReletion.objects.create(
-                    from_user = request.user,
-                    to_user = to_username
+class UserAPIView(APIView):
+    def get(self, request, *args, **kwargs):
+        q = request.GET.get('q')
+        # way 1
+        users = models.User.objects.all()
+        if q:
+            users.filter(
+                Q(username__icontains=q)| 
+                Q(first_name__iconatins=q)| 
+                Q(last_name__iconatins=q)|
+                Q(email__icontains=q)
                 )
-                relation_ser = serializers.UserRelationSerializer(relation)
-                return Response({'detail': 'relation has been created', 'relation' : relation_ser.data})
-            else:
-                return Response({'detail': 'already created relation'})
-        else:
-            return Response({'detail': 'username does not exist'})
-    
+        # way 2
+        # if q:
+        #     users = models.User.objects.filter(
+        #         Q(username__icontains=q)| 
+        #         Q(first_name__iconatins=q)| 
+        #         Q(last_name__iconatins=q)|
+        #         Q(email__icontains=q)
+        #     )
+        # else:
+        #     users = models.User.objects.all()
 
-@api_view(["POST"])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-def delete_relation(request, id):
-    to_user = models.User.objects.get(id = id)
-    if models.UserReletion.objects.filter(from_user = request.user, to_user = to_user).first():
-        models.UserReletion.objects.get(from_user = request.user, to_user = to_user).delete()
-        return Response({'detail': 'relation has been deleted'})
-    else:
-        return Response({'detail': f'You dont have relation with "{to_user.username}"'})
-    
+        serializer = serializers.UserSerializer(users, many=True)
+        return Response(serializer.data)
 
-@api_view(["POST"])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-def create_chat(request, id):
-    user = models.User.objects.get(id = id)
-    if not models.Chat.objects.filter(users=request.user).filter(users=user).first():
-        chat = models.Chat.objects.create(
-        )
-        chat.users.add(request.user, user)
-        chat.save()
-        return Response({'success':'chat has been created'})
-    else:
-        return Response({'detail': 'chat was created before'})
+    def post(self, request, *args, **kwargs):
+        serializer = serializers.UserSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    def put(self, request, pk, *args, **kwargs):
+        try:
+            user = request.user
+        except models.User.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
-@api_view(['POST'])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-def delete_chat(request, id):
-    try:
-        chat = models.Chat.objects.filter(users = request.user).filter(id = id)
+        serializer = serializers.UserSerializer(user, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, *args, **kwargs):
+        try:
+            user = request.user
+        except models.User.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    
+class UserRelationAPIView(APIView):
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        following = models.UserReletion.objects.filter(from_user=user)
+        follower = models.UserReletion.objects.filter(to_user=user)
+        following_ser = serializers.FollowingSerializer(following, many=True)
+        follower_ser = serializers.FollowerSerializer(follower, many=True)
+        data = {
+            'following':following_ser.data,
+            'follower':follower_ser.data,
+        }
+        return Response(data)
+
+
+    def post(self, request, *args, **kwargs):
+        try:
+            from_user = request.user
+            to_user = request.data['to_user']
+            models.UserReletion.objects.create(from_user=from_user, to_user=to_user)
+            return Response(status=status.HTTP_201_CREATED)
+        except:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        try:
+            to_user = models.User.objects.get(pk=pk)
+            reletion = models.UserReletion.objects.get(
+                from_user=request.user,
+                to_user = to_user
+                )
+            reletion.delete()
+            return Response(status=status.HTTP_200_OK)
+        except models.UserReletion.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    
+class ChatAPIView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = serializers.ChatSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request, pk=None, format=None):
+        user = request.user
+        chats = models.Chat.objects.filter(users=user)
+        chats_ser = serializers.ChatListSerializer(chats)
+        return Response(chats_ser.data)
+        # try:
+        #     instance = models.Chat.objects.get(pk=pk)
+        # except models.Chat.DoesNotExist:
+        #     return Response({"message": "Object not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # serializer = serializers.ChatSerializer(instance)
+        # return Response(serializer.data)
+
+    def delete(self, request, pk, *args, **kwargs):
+        try:
+            chat = models.Chat.objects.get(pk=pk)
+        except models.Chat.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         chat.delete()
-        return Response({'success':'chat has been deleted'})
-    except:
-        return Response({'detail':'chat does not exist'})
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    
+class MassageAPIView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = serializers.MassageSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def put(self, request, pk, *args, **kwargs):
+        try:
+            massage = models.Message.objects.get(pk=pk)
+            assert massage.author == request.user
+        except models.Message.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        serializer = serializers.MassageSerializer(massage, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, *args, **kwargs):
+        try:
+            massage = models.Message.objects.get(pk=pk)
+            assert massage.author == request.user
+        except models.Message.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        massage.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view
+def following(request, pk):
+    user = models.User.objects.get(pk=pk)
+    user_reletion = models.UserReletion.objects.filter(from_user=user)
+    serializer_data = serializers.FollowingSerializer(user_reletion, many=True)
+    return serializer_data.data
+
+@api_view
+def follower(request, pk):
+    user = models.User.objects.get(pk=pk)
+    user_reletion = models.UserReletion.objects.filter(to_user=user)
+    serializer_data = serializers.FollowerSerializer(user_reletion, many=True)
+    return serializer_data.data
+
+
+
+class PostView(APIView):
+    def get(self, request, *args, **kwarg):
+        posts = models.Post.objects.filter(author = request.user)
+        posts_ser = serializers.PostSerializer(posts, many = True)
+        return Response(posts_ser.data)
+    
+    @authentication_classes([SessionAuthentication, BasicAuthentication])
+    def post(self, request, *args, **kwargs):
+        """creates post first, and after that Postfiles are created.
+          Postfiles can be created up to 10 files for 1 post"""
+        author = request.user
+        title = request.data['title']
+        body = request.data['body']
+        files = []
+        for i in range(1,11):
+            data = f'file{i}'
+            if data in request.FILES:
+                files.append(request.FILES[data])
+        post = models.Post.objects.create(
+            author = author,
+            title = title,
+            body = body,
+        )
+        for i in files:
+                models.PostFiles.objects.create(
+                    post = post,
+                    file = i
+                )
+        post_ser = serializers.PostSerializer(post)
+        return Response(post_ser.data)
+    
+    def put(self, request, id, *args, **kwargs):
+        post = models.Post.objects.filter(author = request.user).get(id = id)
+        if request.data['title']:
+            post.title = request.data['title']
+        if request.data['body']:
+            post.title = request.data['body']
+        post.save()
+        post_ser = serializers.PostSerializer(post)
+        return Response(post_ser.data)
+    
+    def delete(self, request, id, *args, **kwargs):
+        post = models.Post.objects.filter(author = request.user).get(id = id)
+        post.delete()
+        return Response({'success':'post has been deleted'})
+    
+
+#filtering posts
 @api_view(['GET'])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-def chat_detail(request, id):
-    chat = models.Chat.objects.get(id = id, users = request.user)
-    chat_ser = serializers.ChatSerializer(chat)
-    return Response(chat_ser.data)
+def filter_post(request):
+    search = request.data['search']
+    posts = models.Post.objects.filter(Q(title__icontains = search) | Q(body__icontains = search))
+    posts_ser = serializers.PostSerializer(posts, many = True)
+    return Response (posts_ser.data)
 
 
-@api_view(['POST'])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-def create_message(request, id):
-    chat = models.Chat.objects.get(id = id, users = request.user)
-    body = request.data['body']
-    file = request.FILES.get('file')
-    if not file:
-        message = models.Message.objects.create(
-            author = request.user,
-            chat = chat,
-            body = body,
-        )
-    else:
-        message = models.Message.objects.create(
-            author = request.user,
-            chat = chat,
-            body = body,
-            file = file
-        )
-    message_ser = serializers.MessageSerializer(message)
-    return Response(message_ser.data)
+
+class CommentView(APIView):
+    def get(self, request, id, *args, **kwargs): #id => post_id
+        post = models.Post.objects.get(id = id)
+        comments = models.Comment.objects.filter(post = post).order_by('-date')
+        comments_ser = serializers.CommentSerializer(comments, many = True)
+        return Response(comments_ser.data)
+    
+    def post(self, request, id, *args, **kwargs): #id => post_id
+        post = models.Post.objects.get(id = id)
+        text = request.data['text']
+        if request.data.get('reply'):
+            reply = models.Comment.objects.get(id = request['reply_id'])
+            comment = models.Comment.objects.create(
+                author = request.user,
+                post = post,
+                text = text,
+                reply = reply
+            )
+        else:
+            comment = models.Comment.objects.create(
+                author = request.user,
+                post = post,
+                text = text,
+            )
+        comment_ser = serializers.CommentSerializer(comment)
+        return Response({'success':'created', 'comment':comment_ser.data})
+    
+    def put(self, request, id, *args, **kwargs): # id => comment_id
+        try:
+            comment = models.Comment.objects.filter(author = request.user).get(id = id)
+            comment.text = request.data['text']
+            comment.save()
+            comment_ser = serializers.CommentSerializer(comment)
+            return Response({'succes': 'change has been saved', 'comment': comment_ser.data})
+        except:
+            return Response({'fatal': f'no comment with id {id}'})
+    
+    def delete(self, request, id, *args, **kwargs):
+        comment = models.Comment.objects.filter(author = request.user).get(id = id)
+        comment.delete()
+        return Response({'success':'comment has been deleted'})
 
 
-@api_view(['POST'])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-def update_message(request, id):
-    body = request.data['body']
-    file = request.FILES.get('file')
-    message = models.Message.objects.get(id = id, author = request.user)
-    if not file:
-        message.body = body
-        message.save()
-    else:
-        message.body = body
-        message.file = file
-        message.save()
-    message_ser = serializers.MessageSerializer(message)
-    return Response({'success': 'update has been saved', 'message':message_ser.data})
-
-
-@api_view(['POST'])
-@authentication_classes([SessionAuthentication, BasicAuthentication])
-def delete_message(request, id):
-    message = models.Message.objects.get(id = id, author = request.user)
-    message.delete()
-    return Response({'detail': 'message has been deleted'})
+class LikeView(APIView):
+    def get(self, request, *args, **kwargs):
+        reactions = models.Like.objects.filter(author = request.user).order_by('status')
+        reactions_ser = serializers.LikeSerializer(reactions, many = True)
+        return Response({'all reactions you gave' : reactions_ser.data})
+    
+    def post(self, request, id, *args, **kwargs):
+        try:
+            post = models.Post.objects.get(id = id)
+            status = request.data['status']
+            if status.lower() == 'true':
+                reaction = True
+            elif status.lower() == 'false':
+                reaction = False
+            else: 
+                return Response({"error": "you didn't give a boolean for the status"})
+            data = models.Like.objects.create(
+                author = request.user,
+                post = post,
+                status = reaction,
+            )
+            like_ser = serializers.LikeSerializer(data)
+            return Response({'success': 'created emotion', 'emotion':like_ser.data})
+        except:
+            return Response({'fatal': f'no post with id {id}'})
+    
+    def put(self, request, id, *args, **kwargs):
+        try:
+            post = models.Post.objects.get(id = id)
+            emotion = models.Like.objects.filter(author = request.user).get(post = post)
+            status = request.data['status']
+            if status.lower() == 'true':
+                reaction = True
+            elif status.lower() == 'false':
+                reaction = False
+            emotion.status = reaction
+            emotion.save()
+            emotion_ser = serializers.LikeSerializer(emotion)
+            return Response({'success':'change has been saved', 'updated_to': emotion_ser.data})
+        except:
+            return Response({'fatal': f'no post with id {id}'})
+    
+    def delete(self, request, id, *args, **kwargs):
+        try:
+            post = models.Post.objects.get(id = id)
+            emotion = models.Like.objects.filter(author = request.user).get(post = post)
+            emotion.delete()
+            return Response({'success':'emotion has been deleted'})
+        except:
+            return Response({'fatal': f'no post with id {id}'})

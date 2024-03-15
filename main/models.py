@@ -3,12 +3,13 @@ import os
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
+from rest_framework.response import Response
 
 class User(AbstractUser):
     avatar = models.ImageField(upload_to='avatar/', blank=True, null=True)
 
     def __str__(self):
-        return f"{self.username} -> id:{self.id}"
+        return self.username
     
 
 class UserReletion(models.Model):
@@ -22,19 +23,25 @@ class UserReletion(models.Model):
 class Chat(models.Model):
     users = models.ManyToManyField(User)
 
-    @property
-    def messages(self):
-        messages = Message.objects.filter(chat = self).order_by('date')
-        return messages
-
     def save(self, *args, **kwargs):
-        if not self.pk:  
-            super(Chat, self).save(*args, **kwargs) 
-            if self.users.count() > 2:
-                self.delete()
-                raise AssertionError('Bu shaxsiy')
-        else:
-            super(Chat, self).save(*args, **kwargs)
+        if len(self.users) > 2:
+            raise AssertionError('Bu shaxsiy')
+        super(Chat, self).save(*args, **kwargs)
+    
+    @property
+    def last_message(self):
+        message = Message.objects.filter(chat = self).last()
+        return message
+    
+    @property
+    def unread_messages(self):
+        quantity = Message.objects.filter(
+            chat = self,
+            is_read = False
+            ).count()
+        return quantity
+
+
 
 
 class Message(models.Model):
@@ -55,6 +62,10 @@ class Post(models.Model):
     body = models.TextField()
     date = models.DateTimeField(auto_now_add=True)
 
+    def files(self):
+        files = PostFiles.objects.filter(post = self)
+        return files
+
 
 class PostFiles(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
@@ -68,7 +79,7 @@ class PostFiles(models.Model):
 
 
 class Comment(models.Model):
-    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    author = models.ForeignKey(User, on_delete=models.CASCADE)
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
     text = models.TextField()
     date = models.DateTimeField(auto_now_add=True)
@@ -78,5 +89,11 @@ class Comment(models.Model):
 class Like(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE)
     post = models.ForeignKey(Post, on_delete=models.CASCADE)
-    status = models.BooleanField()
+    status = models.BooleanField() #True = like , False = dislike
+
+    def save(self, *args, **kwargs):
+        if not Like.objects.filter(author = self.author, post = self.post, status = self.status).first():
+            super(Like, self).save(*args, **kwargs)
+        else:
+            return Response({'error': 'emotion for this post was already created with the same bool'})
 

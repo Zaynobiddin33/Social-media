@@ -1,53 +1,68 @@
 from rest_framework.serializers import ModelSerializer
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.authentication import BasicAuthentication, TokenAuthentication, SessionAuthentication
-
 
 from main import models
 
-class UserSerialezer(ModelSerializer):
+
+class UserSerializer(ModelSerializer):
     class Meta:
         model = models.User
-        fields = ['username', 'first_name', 'email']
+        fields = ['username', 'email', 'first_name', 'last_name', 'avatar', 'last_login']
+        
 
-class UserRelationSerializer(ModelSerializer):
+class UserRealtionSerializer(ModelSerializer):
     class Meta:
         model = models.UserReletion
         fields = '__all__'
 
-class MessageSerializer(ModelSerializer):
+
+class FollowingSerializer(ModelSerializer):
+    class Meta:
+        model = models.UserReletion
+        fields = ['from_user',]
+        depth=1
+
+
+class FollowerSerializer(ModelSerializer):
+    class Meta:
+        model = models.UserReletion
+        fields = ['to_user',]
+        depth=1
+        
+
+class ChatSerializer(ModelSerializer):
+    class Meta:
+        model = models.Chat
+        fields = ['id', 'username']
+        
+        
+class MassageSerializer(ModelSerializer):
     class Meta:
         model = models.Message
         fields = '__all__'
 
-class ChatSerializer(ModelSerializer):
-    messages = MessageSerializer(many = True, read_only = True)
+class ChatListSerializer(ModelSerializer):
+    last_message = MassageSerializer(read_only=True)
     class Meta:
         model = models.Chat
-        fields = ['users','messages']
+        fields = ['id', 'last_message', 'unread_messages', 'users']
 
-class PostSerializer(ModelSerializer):
-    class Meta:
-        model = models.Post
-        fields = '__all__'
-
-class PostFilesSerializer(ModelSerializer):
+class PostFileSerializer(ModelSerializer):
     class Meta:
         model = models.PostFiles
-        fields = '__all__'
+        fields = ['file']
 
-class UserRelationSerializer(ModelSerializer):
+class PostSerializer(ModelSerializer):
+    files = PostFileSerializer(many = True, read_only = True)
     class Meta:
-        model = models.UserReletion
-        fields = '__all__'
+        model = models.Post
+        fields = ['id','title', 'body', 'files']
 
-class CommentSerialzer(ModelSerializer):
+class CommentSerializer(ModelSerializer):
     class Meta:
         model = models.Comment
-        fields = '__all__'
+        fields =['author', 'text', 'date']
 
-class LikeSerialzer(ModelSerializer):
+class LikeSerializer(ModelSerializer):
     class Meta:
         model = models.Like
-        fields = '__all__'
+        fields = ['post', 'status']
