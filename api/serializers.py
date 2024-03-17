@@ -19,14 +19,14 @@ class FollowingSerializer(ModelSerializer):
     class Meta:
         model = models.UserReletion
         fields = ['from_user',]
-        depth=1
+        # depth=1
 
 
 class FollowerSerializer(ModelSerializer):
     class Meta:
         model = models.UserReletion
         fields = ['to_user',]
-        depth=1
+        # depth=1
         
 
 class ChatSerializer(ModelSerializer):
@@ -66,3 +66,8 @@ class LikeSerializer(ModelSerializer):
     class Meta:
         model = models.Like
         fields = ['post', 'status']
+
+class ChatUserSerializer(ModelSerializer):
+    class Meta:
+        model = models.ChatUser
+        fields = '__all__'
